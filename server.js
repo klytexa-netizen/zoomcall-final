@@ -6,64 +6,42 @@ const io = require('socket.io')(server);
 app.use(express.static('public'));
 app.use(express.json());
 
-// Simple login - store users
-const users = new Map();
-
+// Simple login
 app.post('/login', (req, res) => {
-    const { email, password, name } = req.body;
-    const userId = email;
-    users.set(userId, { email, name: name || email.split('@')[0] });
-    res.json({ success: true, name: users.get(userId).name });
+    const { email, name } = req.body;
+    res.json({ success: true, name: name || email.split('@')[0] });
 });
 
-// Get all users
-app.get('/users', (req, res) => {
-    res.json(Array.from(users.values()));
-});
-
-// Store online users
-const onlineUsers = new Map();
+// Online users
+let onlineUsers = [];
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     
-    socket.on('join', (userData) => {
-        onlineUsers.set(socket.id, { id: socket.id, name: userData.name, email: userData.email });
-        io.emit('online-users', Array.from(onlineUsers.values()));
+    socket.on('join', (user) => {
+        onlineUsers.push({ id: socket.id, name: user.name, email: user.email });
+        io.emit('users', onlineUsers);
     });
     
     socket.on('offer', (data) => {
-        socket.to(data.targetId).emit('offer', {
-            offer: data.offer,
-            fromId: socket.id,
-            fromName: data.fromName
-        });
+        socket.to(data.target).emit('offer', { offer: data.offer, from: socket.id, fromName: data.fromName });
     });
     
     socket.on('answer', (data) => {
-        socket.to(data.targetId).emit('answer', {
-            answer: data.answer,
-            fromId: socket.id
-        });
+        socket.to(data.target).emit('answer', { answer: data.answer, from: socket.id });
     });
     
-    socket.on('ice-candidate', (data) => {
-        socket.to(data.targetId).emit('ice-candidate', {
-            candidate: data.candidate,
-            fromId: socket.id
-        });
-    });
-    
-    socket.on('hangup', (data) => {
-        socket.to(data.targetId).emit('hangup');
+    socket.on('ice', (data) => {
+        socket.to(data.target).emit('ice', { candidate: data.candidate, from: socket.id });
     });
     
     socket.on('disconnect', () => {
-        onlineUsers.delete(socket.id);
-        io.emit('online-users', Array.from(onlineUsers.values()));
+        onlineUsers = onlineUsers.filter(u => u.id !== socket.id);
+        io.emit('users', onlineUsers);
     });
 });
 
-server.listen(3000, () => {
-    console.log('✅ Server running at http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
