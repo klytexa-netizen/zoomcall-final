@@ -12,7 +12,10 @@
         .login-box h2 { text-align: center; margin-bottom: 20px; color: #333; }
         .login-box input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; }
         .login-box button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
-        .error { color: red; text-align: center; margin-top: 10px; display: none; }
+        .toggle-btn { background: none !important; color: #667eea !important; margin-top: 10px; }
+        .message { text-align: center; padding: 10px; margin-top: 10px; border-radius: 5px; display: none; }
+        .message.error { background: #f8d7da; color: #721c24; display: block; }
+        .message.success { background: #d4edda; color: #155724; display: block; }
         
         .app { display: none; }
         .user-info { background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
@@ -35,22 +38,29 @@
         .status { text-align: center; padding: 10px; margin-top: 10px; border-radius: 8px; display: none; }
         .status.active { background: #d4edda; color: #155724; display: block; }
         .status.waiting { background: #fff3cd; color: #856404; display: block; }
+        
+        .admin-link { position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; }
+        .admin-link:hover { background: #555; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎥 Zoom Call</h1>
         
+        <!-- Login Section -->
         <div id="loginDiv">
             <div class="login-box">
-                <h2>Join Video Call</h2>
-                <input type="text" id="userName" placeholder="Your Name">
-                <input type="email" id="userEmail" placeholder="Your Email">
-                <button onclick="login()">Join Call</button>
-                <div id="loginError" class="error"></div>
+                <h2 id="authTitle">Login</h2>
+                <input type="email" id="email" placeholder="Email" autocomplete="off">
+                <input type="password" id="password" placeholder="Password" autocomplete="off">
+                <input type="text" id="name" placeholder="Your Name" style="display:none">
+                <button onclick="handleAuth()" id="authBtn">Login</button>
+                <button onclick="toggleMode()" class="toggle-btn" id="toggleBtn">Create Account</button>
+                <div id="authMessage" class="message"></div>
             </div>
         </div>
         
+        <!-- Main App -->
         <div id="appDiv" class="app">
             <div class="user-info" id="userInfo"></div>
             <div class="online-users"><h3>👥 Online Users</h3><div id="userList">Loading...</div></div>
@@ -68,34 +78,98 @@
         </div>
     </div>
     
+    <a href="/api/actions" target="_blank" class="admin-link">📊 Admin Data</a>
+    
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let localStream = null, peerConnection = null, currentUser = null, currentCallTarget = null, inCall = false;
+        let isLoginMode = true;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
         
-        async function login() {
-            const name = document.getElementById('userName').value.trim();
-            const email = document.getElementById('userEmail').value.trim();
-            if (!name || !email) {
-                document.getElementById('loginError').innerText = 'Enter name and email';
-                document.getElementById('loginError').style.display = 'block';
+        function toggleMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('authTitle').textContent = isLoginMode ? 'Login' : 'Register';
+            document.getElementById('authBtn').textContent = isLoginMode ? 'Login' : 'Register';
+            document.getElementById('toggleBtn').textContent = isLoginMode ? 'Create Account' : 'Back to Login';
+            document.getElementById('name').style.display = isLoginMode ? 'none' : 'block';
+            document.getElementById('authMessage').style.display = 'none';
+        }
+        
+        async function handleAuth() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const name = document.getElementById('name').value.trim();
+            
+            if (!email || !password) {
+                showMessage('Please enter email and password', 'error');
                 return;
             }
-            currentUser = { name, email };
-            document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${name}`;
-            document.getElementById('loginDiv').style.display = 'none';
-            document.getElementById('appDiv').style.display = 'block';
-            await initCamera();
-            socket.emit('user-join', currentUser);
+            
+            const endpoint = isLoginMode ? '/api/login' : '/api/register';
+            const body = isLoginMode ? { email, password } : { email, password, name: name || email.split('@')[0] };
+            
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    if (isLoginMode) {
+                        currentUser = data.user;
+                        showMessage('Login successful!', 'success');
+                        logToBackend('LOGIN', { email: currentUser.email });
+                        setTimeout(() => {
+                            document.getElementById('loginDiv').style.display = 'none';
+                            document.getElementById('appDiv').style.display = 'block';
+                            document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${currentUser.name} (${currentUser.email})<br>Login count: ${currentUser.loginCount}`;
+                            initCamera();
+                            socket.emit('user-join', currentUser);
+                        }, 1000);
+                    } else {
+                        showMessage('Registration successful! Please login.', 'success');
+                        logToBackend('REGISTER', { email });
+                        setTimeout(() => toggleMode(), 1500);
+                    }
+                } else {
+                    showMessage(data.message, 'error');
+                    logToBackend('LOGIN_FAILED', { email, error: data.message });
+                }
+            } catch(err) {
+                showMessage('Server error', 'error');
+            }
+        }
+        
+        async function logToBackend(action, details) {
+            if (currentUser) {
+                try {
+                    await fetch('/api/log-action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user: currentUser, action, details })
+                    });
+                } catch(e) { console.log('Log error:', e); }
+            }
+        }
+        
+        function showMessage(msg, type) {
+            const d = document.getElementById('authMessage');
+            d.textContent = msg;
+            d.className = `message ${type}`;
+            d.style.display = 'block';
+            setTimeout(() => d.style.display = 'none', 3000);
         }
         
         async function initCamera() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
+                logToBackend('CAMERA_ACTIVATED', {});
                 createPeer();
-            } catch(e) { alert('Camera access denied'); }
+            } catch(e) { alert('Camera access denied'); logToBackend('CAMERA_DENIED', { error: e.message }); }
         }
         
         function createPeer() {
@@ -105,7 +179,12 @@
             peerConnection.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
             peerConnection.onicecandidate = e => { if (e.candidate && currentCallTarget) socket.emit('ice-candidate', { candidate: e.candidate, to: currentCallTarget }); };
             peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'connected') { setStatus('Connected!', 'active'); inCall = true; document.getElementById('endCallBtn').style.display = 'inline-block'; }
+                if (peerConnection.connectionState === 'connected') { 
+                    setStatus('Connected!', 'active'); 
+                    inCall = true; 
+                    document.getElementById('endCallBtn').style.display = 'inline-block';
+                    logToBackend('CALL_CONNECTED', { target: currentCallTarget });
+                }
                 else if (peerConnection.connectionState === 'disconnected') { setStatus('Disconnected', 'waiting'); resetCall(); }
             };
         }
@@ -114,6 +193,7 @@
             if (inCall) { alert('Already in a call'); return; }
             currentCallTarget = targetId;
             setStatus(`Calling ${targetName}...`, 'waiting');
+            logToBackend('CALL_STARTED', { target: targetName });
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
             socket.emit('call-user', { to: targetId, fromName: currentUser.name, offer });
@@ -122,18 +202,22 @@
         socket.on('incoming-call', async (data) => {
             currentCallTarget = data.from;
             setStatus(`Incoming call from ${data.fromName}...`, 'waiting');
+            logToBackend('CALL_RECEIVED', { from: data.fromName });
             if (confirm(`Accept call from ${data.fromName}?`)) {
                 await peerConnection.setRemoteDescription(data.offer);
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 socket.emit('answer-call', { to: data.from, answer });
-                setStatus('Connected!', 'active'); inCall = true; document.getElementById('endCallBtn').style.display = 'inline-block';
+                setStatus('Connected!', 'active'); 
+                inCall = true; 
+                document.getElementById('endCallBtn').style.display = 'inline-block';
+                logToBackend('CALL_ACCEPTED', { from: data.fromName });
             }
         });
         
         socket.on('call-answered', async (data) => { await peerConnection.setRemoteDescription(data.answer); });
         socket.on('ice-candidate', async (data) => { if (peerConnection) await peerConnection.addIceCandidate(data.candidate); });
-        socket.on('call-ended', () => { setStatus('Remote ended call', 'waiting'); resetCall(); });
+        socket.on('call-ended', () => { setStatus('Remote ended call', 'waiting'); resetCall(); logToBackend('CALL_ENDED_REMOTE', {}); });
         
         socket.on('update-users', (users) => {
             const listDiv = document.getElementById('userList');
@@ -144,9 +228,9 @@
         
         function setStatus(msg, type) { const d = document.getElementById('callStatus'); d.textContent = msg; d.className = `status ${type}`; d.style.display = 'block'; }
         function resetCall() { if (peerConnection) peerConnection.close(); document.getElementById('remoteVideo').srcObject = null; currentCallTarget = null; inCall = false; document.getElementById('endCallBtn').style.display = 'none'; createPeer(); }
-        function toggleMute() { const t = localStream.getAudioTracks()[0]; t.enabled = !t.enabled; document.getElementById('muteBtn').textContent = t.enabled ? '🔇 Mute' : '🔊 Unmute'; }
-        function toggleVideo() { const t = localStream.getVideoTracks()[0]; t.enabled = !t.enabled; document.getElementById('videoBtn').textContent = t.enabled ? '📹 Stop Video' : '🎥 Start Video'; }
-        function hangUp() { if (currentCallTarget) socket.emit('end-call', { to: currentCallTarget }); resetCall(); setStatus('Call ended', 'waiting'); }
+        function toggleMute() { const t = localStream.getAudioTracks()[0]; t.enabled = !t.enabled; document.getElementById('muteBtn').textContent = t.enabled ? '🔇 Mute' : '🔊 Unmute'; logToBackend('MUTE_TOGGLED', { muted: !t.enabled }); }
+        function toggleVideo() { const t = localStream.getVideoTracks()[0]; t.enabled = !t.enabled; document.getElementById('videoBtn').textContent = t.enabled ? '📹 Stop Video' : '🎥 Start Video'; logToBackend('VIDEO_TOGGLED', { stopped: !t.enabled }); }
+        function hangUp() { if (currentCallTarget) socket.emit('end-call', { to: currentCallTarget }); resetCall(); setStatus('Call ended', 'waiting'); logToBackend('CALL_ENDED', {}); }
         function leaveCall() { if (peerConnection) peerConnection.close(); if (localStream) localStream.getTracks().forEach(t => t.stop()); location.reload(); }
         function escapeHtml(str) { return str ? str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])) : ''; }
     </script>
