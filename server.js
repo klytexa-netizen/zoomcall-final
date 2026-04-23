@@ -33,32 +33,106 @@ function logCall(callData) {
     fs.writeFileSync(CALLS_FILE, JSON.stringify(calls, null, 2));
 }
 
+// ========== EMAIL VALIDATION FUNCTION ==========
+function isValidEmail(email) {
+    // Email regex pattern for real email validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!emailRegex.test(email)) return false;
+    
+    // Block common disposable email domains
+    const disposableDomains = [
+        'tempmail.com', '10minutemail.com', 'throwaway.com', 'guerrillamail.com',
+        'mailinator.com', 'yopmail.com', 'fakeinbox.com', 'getairmail.com',
+        'temp-mail.org', 'sharklasers.com', 'grr.la', 'guerrillamail.biz',
+        'mailcatch.com', 'spambox.us', 'mailnator.com', 'tempinbox.com'
+    ];
+    
+    const domain = email.split('@')[1];
+    if (disposableDomains.includes(domain)) return false;
+    
+    // Block common fake domains
+    const fakeDomains = ['test.com', 'example.com', 'fake.com', 'demo.com', 'testmail.com', 'test.org'];
+    if (fakeDomains.includes(domain)) return false;
+    
+    return true;
+}
+
+// ========== PASSWORD VALIDATION ==========
+function isValidPassword(password) {
+    // Password must be at least 6 characters
+    if (password.length < 6) return false;
+    
+    // Should contain at least one number
+    if (!/[0-9]/.test(password)) return false;
+    
+    // Should contain at least one letter
+    if (!/[a-zA-Z]/.test(password)) return false;
+    
+    return true;
+}
+
 // ========== API ENDPOINTS ==========
 // Register
 app.post('/api/register', (req, res) => {
     const { email, password, name } = req.body;
     const users = getUsers();
     
-    if (users.find(u => u.email === email)) {
-        return res.json({ status: 'error', message: 'User already exists' });
+    // Validate email
+    if (!email || !isValidEmail(email)) {
+        return res.json({ 
+            status: 'error', 
+            message: 'Please enter a valid email address (e.g., name@domain.com). Fake/temporary emails are not allowed.' 
+        });
     }
     
+    // Validate password
+    if (!password || !isValidPassword(password)) {
+        return res.json({ 
+            status: 'error', 
+            message: 'Password must be at least 6 characters and contain both letters and numbers.' 
+        });
+    }
+    
+    // Check if user already exists
+    if (users.find(u => u.email === email)) {
+        return res.json({ status: 'error', message: 'User already exists. Please login.' });
+    }
+    
+    // Create new user
     users.push({ 
         email, 
         password, 
         name: name || email.split('@')[0], 
         registeredAt: new Date().toISOString(),
-        loginCount: 0
+        loginCount: 0,
+        emailVerified: false
     });
     saveUsers(users);
     logAction({ email, name }, 'REGISTER', { success: true });
-    res.json({ status: 'success', message: 'Registration successful' });
+    res.json({ status: 'success', message: 'Registration successful! Please login.' });
 });
 
 // Login
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
     const users = getUsers();
+    
+    // Validate email format
+    if (!email || !isValidEmail(email)) {
+        logAction({ email }, 'LOGIN_FAILED', { reason: 'invalid_email_format' });
+        return res.json({ 
+            status: 'error', 
+            message: 'Please enter a valid email address.' 
+        });
+    }
+    
+    // Validate password is not empty
+    if (!password) {
+        logAction({ email }, 'LOGIN_FAILED', { reason: 'empty_password' });
+        return res.json({ status: 'error', message: 'Please enter your password.' });
+    }
+    
     const user = users.find(u => u.email === email && u.password === password);
     
     if (user) {
@@ -72,8 +146,8 @@ app.post('/api/login', (req, res) => {
             user: { email: user.email, name: user.name, loginCount: user.loginCount }
         });
     } else {
-        logAction({ email }, 'LOGIN_FAILED', { success: false });
-        res.json({ status: 'error', message: 'Invalid email or password' });
+        logAction({ email }, 'LOGIN_FAILED', { reason: 'invalid_credentials' });
+        res.json({ status: 'error', message: 'Invalid email or password.' });
     }
 });
 
@@ -87,7 +161,9 @@ app.post('/api/log-action', (req, res) => {
 // Get all users (admin)
 app.get('/api/users', (req, res) => {
     const users = getUsers();
-    res.json({ success: true, count: users.length, users });
+    // Remove passwords for security when sending to client
+    const safeUsers = users.map(({ password, ...user }) => user);
+    res.json({ success: true, count: safeUsers.length, users: safeUsers });
 });
 
 // Get all actions (admin)
@@ -161,6 +237,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`✅ Server running at http://localhost:${PORT}`);
+    console.log(`✅ Zoom Call Server running at http://localhost:${PORT}`);
     console.log(`📁 Data files: ${USERS_FILE}, ${ACTIONS_FILE}, ${CALLS_FILE}`);
+    console.log(`🔐 Email validation enabled - Only real emails allowed`);
 });

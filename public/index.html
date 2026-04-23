@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Zoom Call</title>
+    <title>Zoom Call - Secure Video Chat</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         h1 { text-align: center; color: #667eea; margin-bottom: 30px; }
         
-        .login-box { max-width: 400px; margin: 0 auto; padding: 30px; background: #f8f9fa; border-radius: 15px; }
+        .login-box { max-width: 450px; margin: 0 auto; padding: 30px; background: #f8f9fa; border-radius: 15px; }
         .login-box h2 { text-align: center; margin-bottom: 20px; color: #333; }
         .login-box input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; }
         .login-box button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
@@ -16,6 +16,8 @@
         .message { text-align: center; padding: 10px; margin-top: 10px; border-radius: 5px; display: none; }
         .message.error { background: #f8d7da; color: #721c24; display: block; }
         .message.success { background: #d4edda; color: #155724; display: block; }
+        .requirements { margin-top: 15px; font-size: 12px; color: #666; text-align: left; padding: 10px; background: #e9ecef; border-radius: 8px; }
+        .requirements p { margin: 5px 0; }
         
         .app { display: none; }
         .user-info { background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
@@ -24,11 +26,7 @@
         .user-list { display: flex; flex-wrap: wrap; gap: 10px; }
         .user-card { background: white; padding: 10px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; }
         .user-card button { background: #28a745; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
-        .user-card button:disabled { background: #ccc; }
-        
-        .camera-options { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
-        .camera-btn { background: #6c757d; padding: 8px 15px; font-size: 12px; }
-        .camera-btn.active { background: #28a745; }
+        .user-card button:disabled { background: #ccc; cursor: not-allowed; }
         
         .videos { display: flex; gap: 20px; margin: 20px 0; }
         .video-box { flex: 1; position: relative; }
@@ -45,34 +43,33 @@
         
         .admin-link { position: fixed; bottom: 20px; right: 20px; background: #333; color: white; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; }
         .admin-link:hover { background: #555; }
-        
-        .file-input { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎥 Zoom Call</h1>
         
+        <!-- Login Section -->
         <div id="loginDiv">
             <div class="login-box">
                 <h2 id="authTitle">Login</h2>
-                <input type="email" id="email" placeholder="Email" autocomplete="off">
-                <input type="password" id="password" placeholder="Password" autocomplete="off">
+                <input type="email" id="email" placeholder="Your Real Email (e.g., name@gmail.com)" autocomplete="off">
+                <input type="password" id="password" placeholder="Password (min 6 chars, letters + numbers)" autocomplete="off">
                 <input type="text" id="name" placeholder="Your Name" style="display:none">
                 <button onclick="handleAuth()" id="authBtn">Login</button>
                 <button onclick="toggleMode()" class="toggle-btn" id="toggleBtn">Create Account</button>
                 <div id="authMessage" class="message"></div>
+                <div class="requirements">
+                    <p>⚠️ <strong>Email Requirements:</strong> Real email addresses only (no fake/temporary emails)</p>
+                    <p>🔒 <strong>Password Requirements:</strong> Minimum 6 characters with letters AND numbers</p>
+                    <p>📝 <strong>Example:</strong> user@gmail.com | password123</p>
+                </div>
             </div>
         </div>
         
+        <!-- Main App -->
         <div id="appDiv" class="app">
             <div class="user-info" id="userInfo"></div>
-            
-            <div class="camera-options">
-                <button class="camera-btn" onclick="useRealCamera()" id="realCamBtn">📷 Real Camera</button>
-                <button class="camera-btn" onclick="useVirtualCamera()" id="virtualCamBtn">🖼️ Upload Photo/Video</button>
-            </div>
-            
             <div class="online-users"><h3>👥 Online Users</h3><div id="userList">Loading...</div></div>
             <div class="videos">
                 <div class="video-box"><div class="video-label">You</div><video id="localVideo" autoplay muted playsinline></video></div>
@@ -88,11 +85,6 @@
         </div>
     </div>
     
-    <input type="file" id="fileInput" class="file-input" accept="image/*,video/*">
-    <audio id="ringtone" preload="auto">
-        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
-    </audio>
-    
     <a href="/api/actions" target="_blank" class="admin-link">📊 Admin Data</a>
     
     <script src="/socket.io/socket.io.js"></script>
@@ -100,28 +92,7 @@
         const socket = io();
         let localStream = null, peerConnection = null, currentUser = null, currentCallTarget = null, inCall = false;
         let isLoginMode = true;
-        let useVirtual = false;
-        let virtualStream = null;
-        let ringtone = null;
-        
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
-        
-        // Initialize ringtone
-        function playRingtone() {
-            try {
-                ringtone = new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3');
-                ringtone.loop = true;
-                ringtone.play().catch(e => console.log('Ringtone play failed:', e));
-            } catch(e) { console.log('Ringtone error:', e); }
-        }
-        
-        function stopRingtone() {
-            if (ringtone) {
-                ringtone.pause();
-                ringtone.currentTime = 0;
-                ringtone = null;
-            }
-        }
         
         function toggleMode() {
             isLoginMode = !isLoginMode;
@@ -132,6 +103,32 @@
             document.getElementById('authMessage').style.display = 'none';
         }
         
+        function validateEmail(email) {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(email)) return false;
+            
+            const fakeDomains = ['test.com', 'example.com', 'fake.com', 'demo.com', 'testmail.com', 'test.org'];
+            const domain = email.split('@')[1];
+            if (fakeDomains.includes(domain)) return false;
+            
+            return true;
+        }
+        
+        function validatePassword(password) {
+            if (password.length < 6) return false;
+            if (!/[0-9]/.test(password)) return false;
+            if (!/[a-zA-Z]/.test(password)) return false;
+            return true;
+        }
+        
+        function showMessage(msg, type) {
+            const d = document.getElementById('authMessage');
+            d.textContent = msg;
+            d.className = `message ${type}`;
+            d.style.display = 'block';
+            setTimeout(() => d.style.display = 'none', 5000);
+        }
+        
         async function handleAuth() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
@@ -139,6 +136,16 @@
             
             if (!email || !password) {
                 showMessage('Please enter email and password', 'error');
+                return;
+            }
+            
+            if (!validateEmail(email)) {
+                showMessage('Please enter a valid email address (e.g., name@gmail.com). Fake emails like test.com are not allowed.', 'error');
+                return;
+            }
+            
+            if (!validatePassword(password)) {
+                showMessage('Password must be at least 6 characters and contain both letters and numbers.', 'error');
                 return;
             }
             
@@ -157,24 +164,22 @@
                     if (isLoginMode) {
                         currentUser = data.user;
                         showMessage('Login successful!', 'success');
-                        logToBackend('LOGIN', { email: currentUser.email });
                         setTimeout(() => {
                             document.getElementById('loginDiv').style.display = 'none';
                             document.getElementById('appDiv').style.display = 'block';
-                            document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${currentUser.name} (${currentUser.email})<br>Login count: ${currentUser.loginCount}`;
-                            useRealCamera();
+                            document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${currentUser.name} (${currentUser.email})`;
+                            initCamera();
+                            socket.emit('user-join', currentUser);
                         }, 1000);
                     } else {
                         showMessage('Registration successful! Please login.', 'success');
-                        logToBackend('REGISTER', { email });
                         setTimeout(() => toggleMode(), 1500);
                     }
                 } else {
                     showMessage(data.message, 'error');
-                    logToBackend('LOGIN_FAILED', { email, error: data.message });
                 }
             } catch(err) {
-                showMessage('Server error', 'error');
+                showMessage('Server error. Please try again.', 'error');
             }
         }
         
@@ -190,157 +195,19 @@
             }
         }
         
-        function showMessage(msg, type) {
-            const d = document.getElementById('authMessage');
-            d.textContent = msg;
-            d.className = `message ${type}`;
-            d.style.display = 'block';
-            setTimeout(() => d.style.display = 'none', 3000);
-        }
-        
-        // Real Camera
-        async function useRealCamera() {
-            useVirtual = false;
-            document.getElementById('realCamBtn').classList.add('active');
-            document.getElementById('virtualCamBtn').classList.remove('active');
-            
+        async function initCamera() {
             try {
-                if (virtualStream) {
-                    virtualStream.getTracks().forEach(t => t.stop());
-                    virtualStream = null;
-                }
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
-                logToBackend('CAMERA_ACTIVATED', { type: 'real' });
-                if (peerConnection) {
-                    // Replace tracks in existing peer connection
-                    const senders = peerConnection.getSenders();
-                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                    const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                    if (audioSender) audioSender.replaceTrack(localStream.getAudioTracks()[0]);
-                } else {
-                    createPeer();
-                }
-            } catch(e) { 
-                alert('Camera access denied'); 
-                logToBackend('CAMERA_DENIED', { error: e.message });
-            }
-        }
-        
-        // Virtual Camera (Upload Photo/Video)
-        function useVirtualCamera() {
-            useVirtual = true;
-            document.getElementById('virtualCamBtn').classList.add('active');
-            document.getElementById('realCamBtn').classList.remove('active');
-            
-            const fileInput = document.getElementById('fileInput');
-            fileInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                const url = URL.createObjectURL(file);
-                
-                if (file.type.startsWith('image/')) {
-                    // Create canvas stream from image
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
-                        
-                        function draw() {
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            requestAnimationFrame(draw);
-                        }
-                        draw();
-                        
-                        const canvasStream = canvas.captureStream(30);
-                        
-                        // Get audio from microphone
-                        navigator.mediaDevices.getUserMedia({ audio: true })
-                            .then(audioStream => {
-                                localStream = canvasStream;
-                                audioStream.getAudioTracks().forEach(track => {
-                                    localStream.addTrack(track);
-                                });
-                                document.getElementById('localVideo').srcObject = localStream;
-                                logToBackend('VIRTUAL_CAMERA', { type: 'image', file: file.name });
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                } else {
-                                    createPeer();
-                                }
-                            })
-                            .catch(() => {
-                                localStream = canvasStream;
-                                document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                } else {
-                                    createPeer();
-                                }
-                            });
-                    };
-                    img.src = url;
-                } else if (file.type.startsWith('video/')) {
-                    const videoElem = document.createElement('video');
-                    videoElem.src = url;
-                    videoElem.loop = true;
-                    videoElem.muted = false;
-                    videoElem.playsInline = true;
-                    videoElem.autoplay = true;
-                    
-                    videoElem.onloadeddata = async () => {
-                        await videoElem.play();
-                        const videoStream = videoElem.captureStream();
-                        
-                        navigator.mediaDevices.getUserMedia({ audio: true })
-                            .then(audioStream => {
-                                localStream = videoStream;
-                                audioStream.getAudioTracks().forEach(track => {
-                                    localStream.addTrack(track);
-                                });
-                                document.getElementById('localVideo').srcObject = localStream;
-                                logToBackend('VIRTUAL_CAMERA', { type: 'video', file: file.name });
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                } else {
-                                    createPeer();
-                                }
-                            })
-                            .catch(() => {
-                                localStream = videoStream;
-                                document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                } else {
-                                    createPeer();
-                                }
-                            });
-                    };
-                }
-            };
-            fileInput.click();
+                logToBackend('CAMERA_ACTIVATED', {});
+                createPeer();
+            } catch(e) { alert('Camera access denied. Please allow camera and microphone.'); }
         }
         
         function createPeer() {
             if (peerConnection) peerConnection.close();
             peerConnection = new RTCPeerConnection(config);
-            if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
-                });
-            }
+            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
             peerConnection.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
             peerConnection.onicecandidate = e => { if (e.candidate && currentCallTarget) socket.emit('ice-candidate', { candidate: e.candidate, to: currentCallTarget }); };
             peerConnection.onconnectionstatechange = () => {
@@ -355,7 +222,7 @@
         }
         
         async function callUser(targetId, targetName) {
-            if (inCall) { alert('Already in a call'); return; }
+            if (inCall) { alert('Already in a call. End current call first.'); return; }
             currentCallTarget = targetId;
             setStatus(`Calling ${targetName}...`, 'waiting');
             logToBackend('CALL_STARTED', { target: targetName });
@@ -368,14 +235,7 @@
             currentCallTarget = data.from;
             setStatus(`Incoming call from ${data.fromName}...`, 'waiting');
             logToBackend('CALL_RECEIVED', { from: data.fromName });
-            
-            // Play ringtone
-            playRingtone();
-            
-            const accept = confirm(`🔔 Incoming call from ${data.fromName}. Accept?`);
-            stopRingtone();
-            
-            if (accept) {
+            if (confirm(`Accept call from ${data.fromName}?`)) {
                 await peerConnection.setRemoteDescription(data.offer);
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
@@ -384,8 +244,6 @@
                 inCall = true; 
                 document.getElementById('endCallBtn').style.display = 'inline-block';
                 logToBackend('CALL_ACCEPTED', { from: data.fromName });
-            } else {
-                logToBackend('CALL_REJECTED', { from: data.fromName });
             }
         });
         
@@ -402,8 +260,8 @@
         
         function setStatus(msg, type) { const d = document.getElementById('callStatus'); d.textContent = msg; d.className = `status ${type}`; d.style.display = 'block'; }
         function resetCall() { if (peerConnection) peerConnection.close(); document.getElementById('remoteVideo').srcObject = null; currentCallTarget = null; inCall = false; document.getElementById('endCallBtn').style.display = 'none'; createPeer(); }
-        function toggleMute() { if (localStream) { const t = localStream.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; document.getElementById('muteBtn').textContent = t.enabled ? '🔇 Mute' : '🔊 Unmute'; logToBackend('MUTE_TOGGLED', { muted: !t.enabled }); } } }
-        function toggleVideo() { if (localStream) { const t = localStream.getVideoTracks()[0]; if (t) { t.enabled = !t.enabled; document.getElementById('videoBtn').textContent = t.enabled ? '📹 Stop Video' : '🎥 Start Video'; logToBackend('VIDEO_TOGGLED', { stopped: !t.enabled }); } } }
+        function toggleMute() { const t = localStream.getAudioTracks()[0]; t.enabled = !t.enabled; document.getElementById('muteBtn').textContent = t.enabled ? '🔇 Mute' : '🔊 Unmute'; logToBackend('MUTE_TOGGLED', { muted: !t.enabled }); }
+        function toggleVideo() { const t = localStream.getVideoTracks()[0]; t.enabled = !t.enabled; document.getElementById('videoBtn').textContent = t.enabled ? '📹 Stop Video' : '🎥 Start Video'; logToBackend('VIDEO_TOGGLED', { stopped: !t.enabled }); }
         function hangUp() { if (currentCallTarget) socket.emit('end-call', { to: currentCallTarget }); resetCall(); setStatus('Call ended', 'waiting'); logToBackend('CALL_ENDED', {}); }
         function leaveCall() { if (peerConnection) peerConnection.close(); if (localStream) localStream.getTracks().forEach(t => t.stop()); location.reload(); }
         function escapeHtml(str) { return str ? str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])) : ''; }
