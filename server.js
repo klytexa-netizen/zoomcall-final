@@ -82,13 +82,25 @@ app.get('/api/actions', (req, res) => {
 
 // ========== WEBRTC SIGNALING ==========
 let onlineUsers = [];
+let hostId = null;
 
 io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
     
     socket.on('user-join', (userData) => {
-        onlineUsers.push({ socketId: socket.id, name: userData.name, email: userData.email });
-        console.log('👤 User joined:', userData.name);
+        // If no host exists, this user becomes the host
+        const isHost = (hostId === null);
+        if (isHost) {
+            hostId = socket.id;
+        }
+        
+        onlineUsers.push({ 
+            socketId: socket.id, 
+            name: userData.name, 
+            email: userData.email, 
+            isHost: isHost 
+        });
+        console.log('👤 User joined:', userData.name, isHost ? '(HOST)' : '');
         io.emit('update-users', onlineUsers);
     });
     
@@ -123,6 +135,10 @@ io.on('connection', (socket) => {
     
     socket.on('disconnect', () => {
         console.log('❌ User disconnected:', socket.id);
+        if (hostId === socket.id) {
+            hostId = null;
+            console.log('👑 Host left, new host will be assigned on next join');
+        }
         onlineUsers = onlineUsers.filter(u => u.socketId !== socket.id);
         io.emit('update-users', onlineUsers);
     });
