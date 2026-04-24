@@ -26,18 +26,10 @@
         .user-card button { background: #28a745; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
         .user-card button:disabled { background: #ccc; cursor: not-allowed; }
         
-        .host-only { 
-            display: none;
-            background: #e8f4f8;
-            padding: 10px 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
+        .host-only { display: none; background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
         .host-only span { color: #667eea; font-weight: bold; }
         .camera-btn { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-right: 10px; }
-        .camera-btn:hover { background: #218838; }
         .admin-link { background: #333; color: white; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; display: inline-block; }
-        .admin-link:hover { background: #555; }
         
         .videos { display: flex; gap: 20px; margin: 20px 0; }
         .video-box { flex: 1; position: relative; }
@@ -59,7 +51,6 @@
     <div class="container">
         <h1>🎥 Zoom Call</h1>
         
-        <!-- Login Section -->
         <div id="loginDiv">
             <div class="login-box">
                 <h2 id="authTitle">Login</h2>
@@ -72,11 +63,9 @@
             </div>
         </div>
         
-        <!-- Main App -->
         <div id="appDiv" class="app">
             <div class="user-info" id="userInfo"></div>
             
-            <!-- Host Only Section - Only visible to the host user -->
             <div id="hostOnlySection" class="host-only">
                 <span>👑 Host Controls</span><br><br>
                 <button class="camera-btn" onclick="uploadVirtualCamera()">🖼️ Upload Photo/Video</button>
@@ -112,7 +101,6 @@
         let currentTargetId = null;
         let inCall = false;
         let isLoginMode = true;
-        let amIHost = false;
         
         const configuration = {
             iceServers: [
@@ -188,7 +176,7 @@
                 document.getElementById('localVideo').srcObject = localStream;
                 createPeerConnection();
             } catch(e) {
-                console.log('Camera error, using virtual only');
+                console.log('Camera error, waiting for virtual camera');
             }
         }
         
@@ -280,8 +268,9 @@
         }
         
         function createPeerConnection() {
-            if (peerConnection) peerConnection.close();
-            
+            if (peerConnection) {
+                peerConnection.close();
+            }
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -291,11 +280,13 @@
             }
             
             peerConnection.ontrack = (event) => {
+                console.log('Received remote track');
                 document.getElementById('remoteVideo').srcObject = event.streams[0];
             };
             
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && currentTargetId) {
+                    console.log('Sending ICE candidate');
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         targetId: currentTargetId
@@ -304,6 +295,7 @@
             };
             
             peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     setStatus('Connected!', 'active');
                     inCall = true;
@@ -313,7 +305,14 @@
         }
         
         async function startCall(targetId, targetName) {
-            if (inCall) { alert('Already in a call'); return; }
+            if (inCall) {
+                alert('Already in a call');
+                return;
+            }
+            
+            if (!peerConnection) {
+                createPeerConnection();
+            }
             
             currentTargetId = targetId;
             setStatus(`Calling ${targetName}...`, 'waiting');
@@ -322,17 +321,23 @@
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 socket.emit('offer', {
-                    offer: offer,
+                    sdp: offer,
                     targetId: targetId,
                     fromName: currentUser.name
                 });
             } catch(err) {
-                console.error(err);
+                console.error('Error starting call:', err);
                 setStatus('Call failed', 'waiting');
             }
         }
         
         socket.on('offer', async (data) => {
+            console.log('Offer received from:', data.fromId);
+            
+            if (!peerConnection) {
+                createPeerConnection();
+            }
+            
             currentTargetId = data.fromId;
             setStatus(`Incoming call from ${data.fromName}...`, 'waiting');
             
@@ -340,18 +345,18 @@
             
             if (accept) {
                 try {
-                    await peerConnection.setRemoteDescription(data.offer);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
                     socket.emit('answer', {
-                        answer: answer,
+                        sdp: answer,
                         targetId: data.fromId
                     });
                     setStatus('Connected!', 'active');
                     inCall = true;
                     document.getElementById('endCallBtn').style.display = 'inline-block';
                 } catch(err) {
-                    console.error(err);
+                    console.error('Error accepting call:', err);
                     setStatus('Connection failed', 'waiting');
                 }
             } else {
@@ -366,18 +371,18 @@
         
         socket.on('answer', async (data) => {
             try {
-                await peerConnection.setRemoteDescription(data.answer);
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
             } catch(err) {
-                console.error(err);
+                console.error('Error setting answer:', err);
             }
         });
         
         socket.on('ice-candidate', async (data) => {
             if (peerConnection) {
                 try {
-                    await peerConnection.addIceCandidate(data.candidate);
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
                 } catch(err) {
-                    console.error(err);
+                    console.error('Error adding ICE candidate:', err);
                 }
             }
         });
@@ -390,14 +395,11 @@
         socket.on('update-users', (users) => {
             const listDiv = document.getElementById('userList');
             const others = users.filter(u => u.socketId !== socket.id);
-            
-            // Check if current user is the host
             const myUser = users.find(u => u.socketId === socket.id);
+            
             if (myUser && myUser.isHost) {
-                amIHost = true;
                 document.getElementById('hostOnlySection').style.display = 'block';
             } else {
-                amIHost = false;
                 document.getElementById('hostOnlySection').style.display = 'none';
             }
             
@@ -423,12 +425,14 @@
         }
         
         function resetCall() {
-            if (peerConnection) peerConnection.close();
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
             document.getElementById('remoteVideo').srcObject = null;
             currentTargetId = null;
             inCall = false;
             document.getElementById('endCallBtn').style.display = 'none';
-            createPeerConnection();
             setTimeout(() => {
                 const d = document.getElementById('callStatus');
                 d.className = 'status';
@@ -465,8 +469,12 @@
         }
         
         function leaveCall() {
-            if (peerConnection) peerConnection.close();
-            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            if (peerConnection) {
+                peerConnection.close();
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+            }
             location.reload();
         }
         

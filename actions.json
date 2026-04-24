@@ -1,1 +1,224 @@
-[]
+[
+  {
+    "user": {
+      "email": "hush12@gmail.com"
+    },
+    "action": "LOGIN_FAILED",
+    "details": {
+      "reason": "invalid_credentials"
+    },
+    "timestamp": "2026-04-24T09:03:02.879Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com",
+      "name": "hush"
+    },
+    "action": "REGISTER_SUCCESS",
+    "details": {
+      "success": true
+    },
+    "timestamp": "2026-04-24T09:03:07.738Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com",
+      "name": "hush"
+    },
+    "action": "LOGIN_SUCCESS",
+    "details": {
+      "loginCount": 1
+    },
+    "timestamp": "2026-04-24T09:03:10.609Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com",
+      "name": "hush"
+    },
+    "action": "JOINED_CALL",
+    "details": {
+      "socketId": "3NNRHz0fvX6CaMYTAAAD",
+      "isHost": true
+    },
+    "timestamp": "2026-04-24T09:03:11.620Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "REGISTER_SUCCESS",
+    "details": {
+      "success": true
+    },
+    "timestamp": "2026-04-24T09:03:57.684Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "LOGIN_SUCCESS",
+    "details": {
+      "loginCount": 1
+    },
+    "timestamp": "2026-04-24T09:04:00.054Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "JOINED_CALL",
+    "details": {
+      "socketId": "ePVMfQKeVgtMZOhTAAAB",
+      "isHost": false
+    },
+    "timestamp": "2026-04-24T09:04:01.078Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "LEFT_CALL",
+    "details": {
+      "socketId": "ePVMfQKeVgtMZOhTAAAB"
+    },
+    "timestamp": "2026-04-24T09:04:12.197Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "LOGIN_SUCCESS",
+    "details": {
+      "loginCount": 2
+    },
+    "timestamp": "2026-04-24T09:04:32.827Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "JOINED_CALL",
+    "details": {
+      "socketId": "bvMkEjC_dgqIM-DAAAAF",
+      "isHost": false
+    },
+    "timestamp": "2026-04-24T09:04:33.835Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "LEFT_CALL",
+    "details": {
+      "socketId": "bvMkEjC_dgqIM-DAAAAF"
+    },
+    "timestamp": "2026-04-24T09:13:28.289Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "LOGIN_SUCCESS",
+    "details": {
+      "loginCount": 3
+    },
+    "timestamp": "2026-04-24T09:13:37.977Z"
+  },
+  {
+    "user": {
+      "email": "hash0@gmail.com",
+      "name": "hash"
+    },
+    "action": "JOINED_CALL",
+    "details": {
+      "socketId": "VA0ZidKLL-VBy7YdAAAH",
+      "isHost": false
+    },
+    "timestamp": "2026-04-24T09:13:38.998Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com",
+      "name": "hush"
+    },
+    "action": "LEFT_CALL",
+    "details": {
+      "socketId": "3NNRHz0fvX6CaMYTAAAD"
+    },
+    "timestamp": "2026-04-24T09:13:56.533Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com"
+    },
+    "action": "LOGIN_FAILED",
+    "details": {
+      "reason": "invalid_credentials"
+    },
+    "timestamp": "2026-04-24T09:14:17.760Z"
+  },
+  {
+    "user": {
+      "email": "hush12@gmail.com"
+    },
+    "action": "REGISTER_FAILED",
+    "details": {
+      "reason": "user_exists"
+    },
+    "timestamp": "2026-04-24T09:14:21.359Z"
+  },
+  {
+    "user": {
+      "email": "hush13@gmail.com",
+      "name": "hush"
+    },
+    "action": "REGISTER_SUCCESS",
+    "details": {
+      "success": true
+    },
+    "timestamp": "2026-04-24T09:14:27.244Z"
+  },
+  {
+    "user": {
+      "email": "hush13@gmail.com",
+      "name": "hush"
+    },
+    "action": "LOGIN_SUCCESS",
+    "details": {
+      "loginCount": 1
+    },
+    "timestamp": "2026-04-24T09:14:30.017Z"
+  },
+  {
+    "user": {
+      "email": "hush13@gmail.com",
+      "name": "hush"
+    },
+    "action": "JOINED_CALL",
+    "details": {
+      "socketId": "B0IsbNUXVyCTU6BAAAAJ",
+      "isHost": true
+    },
+    "timestamp": "2026-04-24T09:14:31.039Z"
+  },
+  {
+    "user": {
+      "email": "hush13@gmail.com",
+      "name": "hush"
+    },
+    "action": "LEFT_CALL",
+    "details": {
+      "socketId": "B0IsbNUXVyCTU6BAAAAJ"
+    },
+    "timestamp": "2026-04-24T09:16:59.921Z"
+  }
+]
