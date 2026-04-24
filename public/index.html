@@ -117,7 +117,23 @@
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
             ]
         };
         
@@ -189,26 +205,12 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
                 cameraReady = true;
-                
-                // Hide camera setup section
                 document.getElementById('cameraSetupSection').style.display = 'none';
-                
-                // Enable controls
                 document.getElementById('muteBtn').disabled = false;
                 document.getElementById('videoBtn').disabled = false;
-                
-                // Create peer connection
                 createPeerConnection();
-                
                 statusDiv.innerHTML = '✅ Camera ready! You can now make calls.';
                 statusDiv.style.color = 'green';
-                
-                // Refresh user list to enable call buttons
-                setTimeout(() => {
-                    const users = JSON.parse(localStorage.getItem('onlineUsers') || '[]');
-                    updateUserList(users);
-                }, 500);
-                
             } catch(e) {
                 console.error('Camera error:', e);
                 statusDiv.innerHTML = '❌ Camera access denied. Please allow camera permission and try again.';
@@ -312,7 +314,11 @@
         }
         
         function createPeerConnection() {
-            if (peerConnection) peerConnection.close();
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -322,11 +328,13 @@
             }
             
             peerConnection.ontrack = (event) => {
+                console.log('Received remote track');
                 document.getElementById('remoteVideo').srcObject = event.streams[0];
             };
             
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && currentTargetId) {
+                    console.log('Sending ICE candidate');
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         targetId: currentTargetId
@@ -334,12 +342,18 @@
                 }
             };
             
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'connected') {
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peerConnection.iceConnectionState);
+                if (peerConnection.iceConnectionState === 'connected') {
                     setStatus('Connected!', 'active');
                     inCall = true;
                     document.getElementById('endCallBtn').style.display = 'inline-block';
-                } else if (peerConnection.connectionState === 'failed') {
+                }
+            };
+            
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'failed') {
                     setStatus('Connection failed', 'waiting');
                 }
             };
@@ -371,6 +385,7 @@
                     targetId: targetId,
                     fromName: currentUser.name
                 });
+                console.log('Offer sent');
             } catch(err) {
                 console.error('Error starting call:', err);
                 setStatus('Call failed', 'waiting');
@@ -378,9 +393,11 @@
         }
         
         socket.on('offer', async (data) => {
+            console.log('Offer received from:', data.fromId);
+            
             if (!cameraReady) {
                 setStatus(`Incoming call from ${data.fromName}... Please start your camera first.`, 'waiting');
-                alert(`📞 Call from ${data.fromName}. Please click "Start My Camera" first.`);
+                alert(`📞 Call from ${data.fromName}. Please start your camera first.`);
                 return;
             }
             
@@ -405,6 +422,7 @@
                     setStatus('Connected!', 'active');
                     inCall = true;
                     document.getElementById('endCallBtn').style.display = 'inline-block';
+                    console.log('Answer sent');
                 } catch(err) {
                     console.error('Error accepting call:', err);
                     setStatus('Connection failed', 'waiting');
@@ -420,6 +438,7 @@
         });
         
         socket.on('answer', async (data) => {
+            console.log('Answer received');
             try {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
             } catch(err) {
@@ -428,6 +447,7 @@
         });
         
         socket.on('ice-candidate', async (data) => {
+            console.log('ICE candidate received');
             if (peerConnection) {
                 try {
                     await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -443,10 +463,6 @@
         });
         
         socket.on('update-users', (users) => {
-            updateUserList(users);
-        });
-        
-        function updateUserList(users) {
             const listDiv = document.getElementById('userList');
             const others = users.filter(u => u.socketId !== socket.id);
             const myUser = users.find(u => u.socketId === socket.id);
@@ -469,7 +485,7 @@
                     </div>
                 `).join('');
             }
-        }
+        });
         
         function setStatus(msg, type) {
             const d = document.getElementById('callStatus');
