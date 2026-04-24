@@ -16,7 +16,6 @@
         .message { text-align: center; padding: 10px; margin-top: 10px; border-radius: 5px; display: none; }
         .message.error { background: #f8d7da; color: #721c24; display: block; }
         .message.success { background: #d4edda; color: #155724; display: block; }
-        .message.warning { background: #fff3cd; color: #856404; display: block; }
         
         .app { display: none; }
         .user-info { background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
@@ -30,7 +29,6 @@
         .host-only { display: none; background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
         .host-only span { color: #667eea; font-weight: bold; }
         .camera-btn { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-right: 10px; }
-        .real-camera-btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-right: 10px; }
         .admin-link { background: #333; color: white; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 12px; display: inline-block; }
         
         .videos { display: flex; gap: 20px; margin: 20px 0; }
@@ -68,10 +66,8 @@
         <div id="appDiv" class="app">
             <div class="user-info" id="userInfo"></div>
             
-            <!-- Host Only Section - Only visible to host user -->
             <div id="hostOnlySection" class="host-only">
                 <span>👑 Host Controls</span><br><br>
-                <button class="real-camera-btn" onclick="useRealCamera()">📷 Use Real Camera</button>
                 <button class="camera-btn" onclick="uploadVirtualCamera()">🖼️ Upload Photo/Video</button>
                 <a href="/api/users" target="_blank" class="admin-link">📊 Admin Data</a>
             </div>
@@ -105,7 +101,6 @@
         let currentTargetId = null;
         let inCall = false;
         let isLoginMode = true;
-        let isHost = false;
         
         const configuration = {
             iceServers: [
@@ -161,8 +156,7 @@
                             document.getElementById('appDiv').style.display = 'block';
                             document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${currentUser.name} (${currentUser.email})`;
                             socket.emit('user-join', currentUser);
-                            // Try real camera by default for all users
-                            useRealCamera();
+                            initCamera();
                         }, 1000);
                     } else {
                         showMessage('Registration successful! Please login.', 'success');
@@ -176,45 +170,22 @@
             }
         }
         
-        // Real Camera - Available to ALL users
-        async function useRealCamera() {
+        async function initCamera() {
             try {
-                if (localStream) {
-                    localStream.getTracks().forEach(t => t.stop());
-                }
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
-                if (peerConnection) {
-                    const senders = peerConnection.getSenders();
-                    const videoSender = senders.find(s => s.track?.kind === 'video');
-                    const audioSender = senders.find(s => s.track?.kind === 'audio');
-                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                    if (audioSender) audioSender.replaceTrack(localStream.getAudioTracks()[0]);
-                } else {
-                    createPeerConnection();
-                }
-                setStatus('Real camera ready!', 'active');
-                showMessage('Real camera activated', 'success');
+                createPeerConnection();
             } catch(e) {
-                console.error('Real camera error:', e);
-                setStatus('Camera access denied. Please check permissions.', 'waiting');
-                showMessage('Camera access denied. Please allow camera access.', 'error');
+                console.log('Camera error, waiting for virtual camera');
             }
         }
         
-        // Virtual Camera - HOST ONLY
         function uploadVirtualCamera() {
-            if (!isHost) {
-                showMessage('Only the host can upload virtual camera content.', 'error');
-                return;
-            }
-            
             const fileInput = document.getElementById('fileInput');
             fileInput.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                setStatus('Loading virtual camera...', 'waiting');
                 const url = URL.createObjectURL(file);
                 
                 if (file.type.startsWith('image/')) {
@@ -243,8 +214,6 @@
                                     const videoSender = senders.find(s => s.track?.kind === 'video');
                                     if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
                                 }
-                                setStatus('Virtual camera ready!', 'active');
-                                showMessage('Virtual camera activated (image)', 'success');
                             })
                             .catch(() => {
                                 if (localStream) localStream.getTracks().forEach(t => t.stop());
@@ -255,8 +224,6 @@
                                     const videoSender = senders.find(s => s.track?.kind === 'video');
                                     if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
                                 }
-                                setStatus('Virtual camera ready (no audio)', 'active');
-                                showMessage('Virtual camera activated (image, no audio)', 'success');
                             });
                     };
                     img.src = url;
@@ -283,8 +250,6 @@
                                     const videoSender = senders.find(s => s.track?.kind === 'video');
                                     if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
                                 }
-                                setStatus('Virtual camera ready!', 'active');
-                                showMessage('Virtual camera activated (video)', 'success');
                             })
                             .catch(() => {
                                 if (localStream) localStream.getTracks().forEach(t => t.stop());
@@ -295,8 +260,6 @@
                                     const videoSender = senders.find(s => s.track?.kind === 'video');
                                     if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
                                 }
-                                setStatus('Virtual camera ready (no audio)', 'active');
-                                showMessage('Virtual camera activated (video, no audio)', 'success');
                             });
                     };
                 }
@@ -305,7 +268,9 @@
         }
         
         function createPeerConnection() {
-            if (peerConnection) peerConnection.close();
+            if (peerConnection) {
+                peerConnection.close();
+            }
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -321,6 +286,7 @@
             
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && currentTargetId) {
+                    console.log('Sending ICE candidate');
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         targetId: currentTargetId
@@ -431,9 +397,7 @@
             const others = users.filter(u => u.socketId !== socket.id);
             const myUser = users.find(u => u.socketId === socket.id);
             
-            isHost = myUser && myUser.isHost;
-            
-            if (isHost) {
+            if (myUser && myUser.isHost) {
                 document.getElementById('hostOnlySection').style.display = 'block';
             } else {
                 document.getElementById('hostOnlySection').style.display = 'none';
