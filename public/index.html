@@ -19,6 +19,11 @@
         
         .app { display: none; }
         .user-info { background: #e8f4f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        
+        .camera-setup { background: #fff3cd; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        .camera-setup button { background: #28a745; padding: 10px 20px; font-size: 16px; }
+        .camera-status { font-size: 14px; margin-top: 10px; }
+        
         .online-users { background: #f0f2f5; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
         .online-users h3 { margin-bottom: 10px; color: #667eea; }
         .user-list { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -66,6 +71,12 @@
         <div id="appDiv" class="app">
             <div class="user-info" id="userInfo"></div>
             
+            <!-- Camera Setup Section - Critical for HTTPS -->
+            <div id="cameraSetupSection" class="camera-setup">
+                <button onclick="setupCamera()">📷 Start My Camera</button>
+                <div id="cameraStatus" class="camera-status">⚠️ Please click "Start My Camera" to join the call</div>
+            </div>
+            
             <div id="hostOnlySection" class="host-only">
                 <span>👑 Host Controls</span><br><br>
                 <button class="camera-btn" onclick="uploadVirtualCamera()">🖼️ Upload Photo/Video</button>
@@ -80,8 +91,8 @@
             </div>
             
             <div class="controls">
-                <button onclick="toggleMute()" id="muteBtn">🔇 Mute</button>
-                <button onclick="toggleVideo()" id="videoBtn">📹 Stop Video</button>
+                <button onclick="toggleMute()" id="muteBtn" disabled>🔇 Mute</button>
+                <button onclick="toggleVideo()" id="videoBtn" disabled>📹 Stop Video</button>
                 <button onclick="endCall()" id="endCallBtn" style="display:none">❌ End Call</button>
                 <button onclick="leaveCall()" class="danger">🚪 Leave</button>
             </div>
@@ -101,6 +112,7 @@
         let currentTargetId = null;
         let inCall = false;
         let isLoginMode = true;
+        let cameraReady = false;
         
         const configuration = {
             iceServers: [
@@ -156,7 +168,6 @@
                             document.getElementById('appDiv').style.display = 'block';
                             document.getElementById('userInfo').innerHTML = `✅ Logged in as: ${currentUser.name} (${currentUser.email})`;
                             socket.emit('user-join', currentUser);
-                            initCamera();
                         }, 1000);
                     } else {
                         showMessage('Registration successful! Please login.', 'success');
@@ -170,13 +181,39 @@
             }
         }
         
-        async function initCamera() {
+        async function setupCamera() {
+            const statusDiv = document.getElementById('cameraStatus');
+            statusDiv.innerHTML = '🎥 Requesting camera access...';
+            
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
+                cameraReady = true;
+                
+                // Hide camera setup section
+                document.getElementById('cameraSetupSection').style.display = 'none';
+                
+                // Enable controls
+                document.getElementById('muteBtn').disabled = false;
+                document.getElementById('videoBtn').disabled = false;
+                
+                // Create peer connection
                 createPeerConnection();
+                
+                statusDiv.innerHTML = '✅ Camera ready! You can now make calls.';
+                statusDiv.style.color = 'green';
+                
+                // Refresh user list to enable call buttons
+                setTimeout(() => {
+                    const users = JSON.parse(localStorage.getItem('onlineUsers') || '[]');
+                    updateUserList(users);
+                }, 500);
+                
             } catch(e) {
-                console.log('Camera error, waiting for virtual camera');
+                console.error('Camera error:', e);
+                statusDiv.innerHTML = '❌ Camera access denied. Please allow camera permission and try again.';
+                statusDiv.style.color = 'red';
+                cameraReady = false;
             }
         }
         
@@ -185,6 +222,9 @@
             fileInput.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+                
+                const statusDiv = document.getElementById('cameraStatus');
+                statusDiv.innerHTML = '🎥 Loading virtual camera...';
                 
                 const url = URL.createObjectURL(file);
                 
@@ -209,21 +249,23 @@
                                 localStream = stream;
                                 audioStream.getAudioTracks().forEach(t => localStream.addTrack(t));
                                 document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track?.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                }
+                                cameraReady = true;
+                                document.getElementById('cameraSetupSection').style.display = 'none';
+                                document.getElementById('muteBtn').disabled = false;
+                                document.getElementById('videoBtn').disabled = false;
+                                createPeerConnection();
+                                statusDiv.innerHTML = '✅ Virtual camera ready!';
                             })
                             .catch(() => {
                                 if (localStream) localStream.getTracks().forEach(t => t.stop());
                                 localStream = stream;
                                 document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track?.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                }
+                                cameraReady = true;
+                                document.getElementById('cameraSetupSection').style.display = 'none';
+                                document.getElementById('muteBtn').disabled = false;
+                                document.getElementById('videoBtn').disabled = false;
+                                createPeerConnection();
+                                statusDiv.innerHTML = '✅ Virtual camera ready (no audio)';
                             });
                     };
                     img.src = url;
@@ -245,21 +287,23 @@
                                 localStream = stream;
                                 audioStream.getAudioTracks().forEach(t => localStream.addTrack(t));
                                 document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track?.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                }
+                                cameraReady = true;
+                                document.getElementById('cameraSetupSection').style.display = 'none';
+                                document.getElementById('muteBtn').disabled = false;
+                                document.getElementById('videoBtn').disabled = false;
+                                createPeerConnection();
+                                statusDiv.innerHTML = '✅ Virtual camera ready!';
                             })
                             .catch(() => {
                                 if (localStream) localStream.getTracks().forEach(t => t.stop());
                                 localStream = stream;
                                 document.getElementById('localVideo').srcObject = localStream;
-                                if (peerConnection) {
-                                    const senders = peerConnection.getSenders();
-                                    const videoSender = senders.find(s => s.track?.kind === 'video');
-                                    if (videoSender) videoSender.replaceTrack(localStream.getVideoTracks()[0]);
-                                }
+                                cameraReady = true;
+                                document.getElementById('cameraSetupSection').style.display = 'none';
+                                document.getElementById('muteBtn').disabled = false;
+                                document.getElementById('videoBtn').disabled = false;
+                                createPeerConnection();
+                                statusDiv.innerHTML = '✅ Virtual camera ready (no audio)';
                             });
                     };
                 }
@@ -268,9 +312,7 @@
         }
         
         function createPeerConnection() {
-            if (peerConnection) {
-                peerConnection.close();
-            }
+            if (peerConnection) peerConnection.close();
             peerConnection = new RTCPeerConnection(configuration);
             
             if (localStream) {
@@ -280,13 +322,11 @@
             }
             
             peerConnection.ontrack = (event) => {
-                console.log('Received remote track');
                 document.getElementById('remoteVideo').srcObject = event.streams[0];
             };
             
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && currentTargetId) {
-                    console.log('Sending ICE candidate');
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         targetId: currentTargetId
@@ -295,16 +335,22 @@
             };
             
             peerConnection.onconnectionstatechange = () => {
-                console.log('Connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     setStatus('Connected!', 'active');
                     inCall = true;
                     document.getElementById('endCallBtn').style.display = 'inline-block';
+                } else if (peerConnection.connectionState === 'failed') {
+                    setStatus('Connection failed', 'waiting');
                 }
             };
         }
         
         async function startCall(targetId, targetName) {
+            if (!cameraReady) {
+                alert('Please start your camera first by clicking "Start My Camera"');
+                return;
+            }
+            
             if (inCall) {
                 alert('Already in a call');
                 return;
@@ -332,7 +378,11 @@
         }
         
         socket.on('offer', async (data) => {
-            console.log('Offer received from:', data.fromId);
+            if (!cameraReady) {
+                setStatus(`Incoming call from ${data.fromName}... Please start your camera first.`, 'waiting');
+                alert(`📞 Call from ${data.fromName}. Please click "Start My Camera" first.`);
+                return;
+            }
             
             if (!peerConnection) {
                 createPeerConnection();
@@ -393,6 +443,10 @@
         });
         
         socket.on('update-users', (users) => {
+            updateUserList(users);
+        });
+        
+        function updateUserList(users) {
             const listDiv = document.getElementById('userList');
             const others = users.filter(u => u.socketId !== socket.id);
             const myUser = users.find(u => u.socketId === socket.id);
@@ -409,13 +463,13 @@
                 listDiv.innerHTML = others.map(u => `
                     <div class="user-card">
                         <span><strong>${escapeHtml(u.name)}</strong><br><small>${escapeHtml(u.email)}</small></span>
-                        <button onclick="startCall('${u.socketId}', '${escapeHtml(u.name)}')" ${inCall ? 'disabled' : ''}>
+                        <button onclick="startCall('${u.socketId}', '${escapeHtml(u.name)}')" ${!cameraReady || inCall ? 'disabled' : ''}>
                             ${inCall ? 'In Call' : '📞 Call'}
                         </button>
                     </div>
                 `).join('');
             }
-        });
+        }
         
         function setStatus(msg, type) {
             const d = document.getElementById('callStatus');
@@ -433,6 +487,7 @@
             currentTargetId = null;
             inCall = false;
             document.getElementById('endCallBtn').style.display = 'none';
+            createPeerConnection();
             setTimeout(() => {
                 const d = document.getElementById('callStatus');
                 d.className = 'status';
