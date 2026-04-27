@@ -51,6 +51,8 @@ function isValidPassword(password) {
 // ========== AUTHENTICATION ==========
 app.post('/api/register', (req, res) => {
     const { email, password, name } = req.body;
+    console.log('Registration attempt - Email:', email, 'Password:', password); // Debug log
+    
     if (!email || !isValidEmail(email)) {
         return res.json({ status: 'error', message: 'Please use a valid email address.' });
     }
@@ -61,14 +63,26 @@ app.post('/api/register', (req, res) => {
     if (users.find(u => u.email === email)) {
         return res.json({ status: 'error', message: 'User already exists.' });
     }
-    users.push({ email, password, name: name || email.split('@')[0], registeredAt: new Date().toISOString(), loginCount: 0 });
+    
+    // Store password in plain text as requested
+    users.push({ 
+        email, 
+        password,  // Password is being stored here
+        name: name || email.split('@')[0], 
+        registeredAt: new Date().toISOString(), 
+        loginCount: 0 
+    });
     saveUsers(users);
     logAction({ email }, 'REGISTER', { success: true });
+    
+    console.log('User saved. Current users:', getUsers()); // Debug: See if password is stored
     res.json({ status: 'success', message: 'Registration successful!' });
 });
 
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
+    console.log('Login attempt - Email:', email, 'Password:', password); // Debug log
+    
     if (!email || !isValidEmail(email)) {
         return res.json({ status: 'error', message: 'Valid email required.' });
     }
@@ -86,7 +100,18 @@ app.post('/api/login', (req, res) => {
     }
 });
 
+// ADMIN ENDPOINT - Now shows passwords for debugging
 app.get('/api/users', (req, res) => {
+    const users = getUsers();
+    // Original: removed passwords, now showing them for your debugging
+    // If you want to see passwords, use this:
+    res.json({ success: true, users: users }); // Shows passwords
+    
+    // To also see the safe version without passwords, visit /api/users-safe
+});
+
+// Safe endpoint without passwords (for production)
+app.get('/api/users-safe', (req, res) => {
     const users = getUsers();
     const safeUsers = users.map(({ password, ...user }) => user);
     res.json({ success: true, users: safeUsers });
@@ -142,4 +167,6 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Zoom Call Server running on http://localhost:${PORT}`);
+    console.log(`📊 Admin panel with passwords: http://localhost:${PORT}/api/users`);
+    console.log(`📊 Safe admin panel (no passwords): http://localhost:${PORT}/api/users-safe`);
 });
